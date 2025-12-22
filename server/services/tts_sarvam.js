@@ -277,12 +277,15 @@ async function generateSarvamTTS(text, options = {}) {
         console.log(`   Text: "${text.substring(0, 50)}..."`);
         console.log(`   Speaker: ${speaker}`);
 
-        // Determine output codec based on use case
+        // Determine output codec and sample rate based on use case
         let outputCodec = 'mulaw';  // Default: µ-law for Twilio
+        let sampleRate = 8000;      // Default: 8kHz for Twilio
+
         if (options.skipTwilioConversion) {
-            // For preview: use linear16 (PCM) which we'll convert to MP3
-            outputCodec = 'linear16';
-            console.log(`[TTS] Preview mode: requesting linear16 (PCM) for MP3 conversion`);
+            // For preview: use requested format (default to mp3) and higher sample rate
+            outputCodec = options.format || 'mp3';
+            sampleRate = 24000; // Better quality for preview
+            console.log(`[TTS] Preview mode: requesting ${outputCodec} at ${sampleRate}Hz`);
         } else {
             console.log(`[TTS] Twilio mode: requesting mulaw directly (NO CONVERSION NEEDED!)`);
         }
@@ -294,14 +297,14 @@ async function generateSarvamTTS(text, options = {}) {
             speaker: speaker,
             model: "bulbul:v2",
             enable_preprocessing: true,
-            speech_sample_rate: 8000,  // 8kHz for Twilio
+            speech_sample_rate: sampleRate,
             output_audio_codec: outputCodec  // ✨ NEW: Request specific codec!
         };
 
         console.log(`[TTS] Sarvam request:`, {
             speaker,
             language,
-            sample_rate: 8000,
+            sample_rate: sampleRate,
             codec: outputCodec
         });
 
