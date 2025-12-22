@@ -8,7 +8,7 @@ const sessions = new Map();
 class DeepgramBrowserHandler {
     constructor(deepgramApiKey, geminiApiKey, openaiApiKey, mysqlPool = null) {
         if (!deepgramApiKey) throw new Error("Missing Deepgram API Key");
-        if (!geminiApiKey) throw new Error("Missing Gemini API Key");
+        // if (!geminiApiKey) throw new Error("Missing Gemini API Key");
 
         this.deepgramClient = createClient(deepgramApiKey);
         this.llmService = new LLMService(geminiApiKey, openaiApiKey); // Pass both API keys
