@@ -142,8 +142,11 @@ router.post('/:id/preview', async (req, res) => {
 
         // Configure format based on provider for web browser compatibility
         if (voice.provider === 'sarvam') {
-            ttsOptions.format = 'wav';
-            ttsOptions.skipConversion = true; // Return raw WAV for browser
+            // Sarvam: Ensure browser-compatible format
+            // Don't skip conversion - we need proper format for browser playback
+            ttsOptions.speaker = voice.provider_voice_id;
+            ttsOptions.language = voice.language_code;
+            // The TTS controller will handle format conversion to browser-compatible audio
         } else {
             // ElevenLabs
             ttsOptions.output_format = 'mp3_44100_128'; // Standard MP3 for browser
