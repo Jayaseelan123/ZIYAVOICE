@@ -137,18 +137,18 @@ router.post('/:id/preview', async (req, res) => {
             voiceId: voice.provider_voice_id,
             provider: voice.provider,
             language: voice.language_code,
-            speaker: voice.provider_voice_id
+            speaker: voice.provider_voice_id,
+            skipTwilioConversion: true  // CRITICAL: Don't convert to µ-law for preview!
         };
 
         // Configure format based on provider for web browser compatibility
         if (voice.provider === 'sarvam') {
-            // Sarvam: Ensure browser-compatible format
-            // Don't skip conversion - we need proper format for browser playback
+            // Sarvam: Request MP3 format for browser playback
+            ttsOptions.format = 'mp3';
             ttsOptions.speaker = voice.provider_voice_id;
             ttsOptions.language = voice.language_code;
-            // The TTS controller will handle format conversion to browser-compatible audio
         } else {
-            // ElevenLabs
+            // ElevenLabs: Request MP3 format for browser playback
             ttsOptions.output_format = 'mp3_44100_128'; // Standard MP3 for browser
         }
 
@@ -157,8 +157,8 @@ router.post('/:id/preview', async (req, res) => {
         // Convert buffer to base64
         const base64Audio = audioBuffer.toString('base64');
 
-        // Determine MIME type
-        const mimeType = voice.provider === 'sarvam' ? 'audio/wav' : 'audio/mpeg';
+        // Determine MIME type - both should be MP3 for browser
+        const mimeType = 'audio/mpeg';
         const dataUri = `data:${mimeType};base64,${base64Audio}`;
 
         res.json({
