@@ -107,17 +107,35 @@ async function convertToPcm8k(audioBuffer, sourceFormat) {
             }
 
             const ffmpeg = spawn('ffmpeg', args);
+            let ffmpegError = '';
+
+            // Capture stderr for debugging
+            ffmpeg.stderr.on('data', (data) => {
+                ffmpegError += data.toString();
+            });
+
+            // Add timeout to prevent hanging
+            const timeout = setTimeout(() => {
+                ffmpeg.kill();
+                cleanup();
+                reject(new Error('FFmpeg conversion timed out after 30 seconds'));
+            }, 30000);
 
             ffmpeg.on('close', (code) => {
+                clearTimeout(timeout);
                 cleanup();
                 if (code !== 0) {
-                    reject(new Error(`ffmpeg exited with code ${code}`));
+                    reject(new Error(`ffmpeg exited with code ${code}. Error: ${ffmpegError}`));
                     return;
                 }
 
                 if (fs.existsSync(outputFile)) {
                     const pcmData = fs.readFileSync(outputFile);
-                    fs.unlinkSync(outputFile);
+                    try {
+                        fs.unlinkSync(outputFile);
+                    } catch (e) {
+                        console.error('Failed to cleanup output file:', e);
+                    }
                     resolve(pcmData);
                 } else {
                     reject(new Error('Output file not created'));
@@ -125,12 +143,18 @@ async function convertToPcm8k(audioBuffer, sourceFormat) {
             });
 
             ffmpeg.on('error', (err) => {
+                clearTimeout(timeout);
                 cleanup();
-                reject(err);
+                reject(new Error(`FFmpeg error: ${err.message}. Make sure FFmpeg is installed.`));
             });
 
             function cleanup() {
-                if (fs.existsSync(inputFile)) fs.unlinkSync(inputFile);
+                try {
+                    if (fs.existsSync(inputFile)) fs.unlinkSync(inputFile);
+                    if (fs.existsSync(outputFile)) fs.unlinkSync(outputFile);
+                } catch (e) {
+                    console.error('Cleanup error:', e);
+                }
             }
 
         } catch (err) {
@@ -182,8 +206,15 @@ async function generateSarvamTTS(text, options = {}) {
         );
 
         if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Sarvam API error: ${response.status} - ${errorText}`);
+            let errorMessage = `Sarvam API error: ${response.status}`;
+            try {
+                const errorData = await response.json();
+                errorMessage += ` - ${errorData.message || errorData.error || JSON.stringify(errorData)}`;
+            } catch (e) {
+                const errorText = await response.text();
+                errorMessage += ` - ${errorText}`;
+            }
+            throw new Error(errorMessage);
         }
 
         const jsonResponse = await response.json();
