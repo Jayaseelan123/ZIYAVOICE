@@ -8,10 +8,26 @@ const expressWs = require('express-ws');
 const { v4: uuidv4 } = require('uuid');
 const twilio = require('twilio');
 // Load environment variables
-const envPath = process.env.NODE_ENV === 'production'
-  ? path.resolve(__dirname, '.env')
-  : path.resolve(__dirname, '../.env.local');
-dotenv.config({ path: envPath });
+const fs = require('fs');
+
+// Load environment variables
+// Priority: .env.local (root) -> .env (root) -> .env (server dir)
+const rootEnvLocal = path.resolve(__dirname, '../.env.local');
+const rootEnv = path.resolve(__dirname, '../.env');
+const serverEnv = path.resolve(__dirname, '.env');
+
+if (fs.existsSync(rootEnvLocal)) {
+  console.log(`Loading env from: ${rootEnvLocal}`);
+  dotenv.config({ path: rootEnvLocal });
+} else if (fs.existsSync(rootEnv)) {
+  console.log(`Loading env from: ${rootEnv}`);
+  dotenv.config({ path: rootEnv });
+} else if (fs.existsSync(serverEnv)) {
+  console.log(`Loading env from: ${serverEnv}`);
+  dotenv.config({ path: serverEnv });
+} else {
+  console.warn('⚠️ No .env file found!');
+}
 // Import services (STATIC classes)
 const { ApiKeyService } = require('./services/apiKeyService.js');
 const { ExternalApiService } = require('./services/externalApiService.js');
@@ -105,7 +121,7 @@ console.log('Gemini API Key configured:', !!geminiApiKey);
 console.log('OpenAI API Key configured:', !!openaiApiKey);
 
 let deepgramBrowserHandler;
-if (deepgramApiKey && geminiApiKey) {
+if (deepgramApiKey) {
   try {
     deepgramBrowserHandler = new DeepgramBrowserHandler(deepgramApiKey, geminiApiKey, openaiApiKey, mysqlPool);
     app.ws('/voice-stream-deepgram', (ws, req) => {
@@ -125,7 +141,7 @@ const elevenLabsApiKey = process.env.ELEVEN_LABS_API_KEY || process.env.ELEVENLA
 const sarvamApiKey = process.env.SARVAM_API_KEY;
 
 let browserVoiceHandler;
-if (deepgramApiKey && geminiApiKey) {
+if (deepgramApiKey) {
   try {
     browserVoiceHandler = new BrowserVoiceHandler(
       deepgramApiKey,
@@ -148,7 +164,7 @@ if (deepgramApiKey && geminiApiKey) {
     console.error('Failed to initialize BrowserVoiceHandler:', error.message);
   }
 } else {
-  console.warn('⚠️ BrowserVoiceHandler not initialized (missing Deepgram or Gemini API keys)');
+  console.warn('⚠️ BrowserVoiceHandler not initialized (missing Deepgram API key)');
 }
 
 // === ADD THIS BLOCK ===
