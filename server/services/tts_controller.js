@@ -33,12 +33,14 @@ function getSarvamApiKey() {
  */
 async function generateTTS(text, options = {}) {
     // Known Sarvam speakers (updated list from API)
+    // WARNING: This is a hardcoded list. New Sarvam voices won't be auto-detected.
+    // TODO: Query database or Sarvam API for voice list instead
     const sarvamSpeakers = [
         'anushka', 'abhilash', 'manisha', 'vidya', 'arya', 'karun', 'hitesh', 'aditya',
         'isha', 'ritu', 'chirag', 'harsh', 'sakshi', 'priya', 'neha', 'rahul',
         'pooja', 'rohan', 'simran', 'kavya', 'anjali', 'sneha', 'kiran', 'vikram',
         'rajesh', 'sunita', 'tara', 'anirudh', 'kriti', 'ishaan', 'ratan', 'varun',
-        'manan', 'sumit', 'roopa', 'kabir', 'aayan', 'shubh'
+        'manan', 'sumit', 'roopa', 'kabir', 'aayan', 'shubh', 'meera'
     ];
 
     // Auto-detect provider based on voice ID or speaker
@@ -53,8 +55,13 @@ async function generateTTS(text, options = {}) {
             if (!options.speaker) {
                 options.speaker = voiceId;
             }
-        } else {
+        } else if (voiceId.length > 0) {
+            // If we have a voice ID but it's not in the Sarvam list, assume ElevenLabs
             provider = 'elevenlabs';
+        } else {
+            // No voice ID provided, default to ElevenLabs
+            provider = 'elevenlabs';
+            console.warn('[TTS Controller] No voice ID or provider specified, defaulting to ElevenLabs');
         }
     }
 
