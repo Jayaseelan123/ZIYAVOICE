@@ -165,6 +165,98 @@ async function convertToPcm8k(audioBuffer, sourceFormat) {
 }
 
 /**
+ * Convert audio buffer to MP3 format using ffmpeg
+ * @param {Buffer} audioBuffer - Source audio buffer
+ * @param {string} sourceFormat - Source format (mp3, wav, s16le, etc.)
+ * @returns {Promise<Buffer>} - MP3 audio buffer
+ */
+async function convertToMp3(audioBuffer, sourceFormat) {
+    return new Promise((resolve, reject) => {
+        const tempDir = os.tmpdir();
+        const inputExt = sourceFormat === 's16le' ? 'pcm' : sourceFormat;
+        const inputFile = path.join(tempDir, `sarvam_input_${Date.now()}.${inputExt}`);
+        const outputFile = path.join(tempDir, `sarvam_output_${Date.now()}.mp3`);
+
+        try {
+            // Write input to temp file
+            fs.writeFileSync(inputFile, audioBuffer);
+
+            // Build ffmpeg args for MP3 conversion
+            const args = [
+                '-y',
+                '-i', inputFile,
+                '-codec:a', 'libmp3lame',
+                '-b:a', '128k',
+                '-ar', '44100',
+                '-ac', '2',
+                outputFile
+            ];
+
+            // If input is raw PCM, specify input format
+            if (sourceFormat === 's16le') {
+                args.unshift('-ac', '1');
+                args.unshift('-ar', '24000');
+                args.unshift('-f', 's16le');
+            }
+
+            const ffmpeg = spawn('ffmpeg', args);
+            let ffmpegError = '';
+
+            ffmpeg.stderr.on('data', (data) => {
+                ffmpegError += data.toString();
+            });
+
+            const timeout = setTimeout(() => {
+                ffmpeg.kill();
+                cleanup();
+                reject(new Error('FFmpeg MP3 conversion timed out after 30 seconds'));
+            }, 30000);
+
+            ffmpeg.on('close', (code) => {
+                clearTimeout(timeout);
+                cleanup();
+                if (code !== 0) {
+                    reject(new Error(`ffmpeg MP3 conversion failed with code ${code}. Error: ${ffmpegError}`));
+                    return;
+                }
+
+                if (fs.existsSync(outputFile)) {
+                    const mp3Data = fs.readFileSync(outputFile);
+                    try {
+                        fs.unlinkSync(outputFile);
+                    } catch (e) {
+                        console.error('Failed to cleanup MP3 output file:', e);
+                    }
+                    resolve(mp3Data);
+                } else {
+                    reject(new Error('MP3 output file not created'));
+                }
+            });
+
+            ffmpeg.on('error', (err) => {
+                clearTimeout(timeout);
+                cleanup();
+                reject(new Error(`FFmpeg MP3 conversion error: ${err.message}. Make sure FFmpeg is installed.`));
+            });
+
+            function cleanup() {
+                try {
+                    if (fs.existsSync(inputFile)) fs.unlinkSync(inputFile);
+                    if (fs.existsSync(outputFile)) fs.unlinkSync(outputFile);
+                } catch (e) {
+                    console.error('Cleanup error:', e);
+                }
+            }
+
+        } catch (err) {
+            if (fs.existsSync(inputFile)) fs.unlinkSync(inputFile);
+            reject(err);
+        }
+    });
+}
+
+
+/**
  * Generate speech audio using Sarvam TTS API
  * @param {string} text - The text to convert to speech
  * @param {Object} options - TTS options
@@ -231,7 +323,23 @@ async function generateSarvamTTS(text, options = {}) {
         const actualFormat = detectAudioFormat(audioBuffer);
         console.log(`[TTS] Detected Sarvam format: ${actualFormat}`);
 
-        // Robust 2-Step Conversion: Source -> PCM 8k -> MuLaw
+        // If skipTwilioConversion is true, return MP3 for browser preview
+        if (options.skipTwilioConversion) {
+            console.log(`[TTS] skipTwilioConversion=true, converting to MP3 for browser preview`);
+
+            // If already MP3, return as-is
+            if (actualFormat === 'mp3') {
+                console.log(`[TTS] Audio is already MP3, returning as-is`);
+                return audioBuffer;
+            }
+
+            // Convert to MP3 using FFmpeg
+            const mp3Buffer = await convertToMp3(audioBuffer, actualFormat);
+            console.log(`[TTS] Converted to MP3: ${mp3Buffer.length} bytes`);
+            return mp3Buffer;
+        }
+
+        // For Twilio calls: Robust 2-Step Conversion: Source -> PCM 8k -> MuLaw
         // Step 1: Convert to PCM 8k (using FFmpeg)
         const pcmBuffer = await convertToPcm8k(audioBuffer, actualFormat);
         console.log(`[TTS] Converted to PCM 8k: ${pcmBuffer.length} bytes`);
