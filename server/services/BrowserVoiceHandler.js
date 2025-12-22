@@ -10,7 +10,9 @@ const sessions = new Map();
 class BrowserVoiceHandler {
     constructor(deepgramApiKey, geminiApiKey, openaiApiKey, elevenLabsApiKey, sarvamApiKey, mysqlPool = null) {
         if (!deepgramApiKey) throw new Error("Missing Deepgram API Key");
-        if (!geminiApiKey) throw new Error("Missing Gemini API Key");
+
+        // Removed strict check for Gemini API Key to allow STT-only or OpenAI-only usage
+        // if (!geminiApiKey) throw new Error("Missing Gemini API Key");
 
         this.deepgramApiKey = deepgramApiKey;
         this.geminiApiKey = geminiApiKey;
