@@ -290,7 +290,7 @@ class MediaStreamHandler {
                         const deepgramLive = this.deepgramClient.listen.live({
                             encoding: "mulaw",
                             sample_rate: 8000,
-                            model: "nova-2-phonecall",
+                            model: "nova-2",
                             smart_format: true,
                             interim_results: true,  // MUST be true for utterance_end_ms
                             utterance_end_ms: 1000,
