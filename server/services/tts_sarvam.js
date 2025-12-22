@@ -277,7 +277,34 @@ async function generateSarvamTTS(text, options = {}) {
         console.log(`   Text: "${text.substring(0, 50)}..."`);
         console.log(`   Speaker: ${speaker}`);
 
-        // Request 8kHz audio directly from Sarvam to match Twilio requirements
+        // Determine output codec based on use case
+        let outputCodec = 'mulaw';  // Default: µ-law for Twilio
+        if (options.skipTwilioConversion) {
+            // For preview: use linear16 (PCM) which we'll convert to MP3
+            outputCodec = 'linear16';
+            console.log(`[TTS] Preview mode: requesting linear16 (PCM) for MP3 conversion`);
+        } else {
+            console.log(`[TTS] Twilio mode: requesting mulaw directly (NO CONVERSION NEEDED!)`);
+        }
+
+        // Request audio from Sarvam with optimal format
+        const requestBody = {
+            inputs: [text],
+            target_language_code: language,
+            speaker: speaker,
+            model: "bulbul:v2",
+            enable_preprocessing: true,
+            speech_sample_rate: 8000,  // 8kHz for Twilio
+            output_audio_codec: outputCodec  // ✨ NEW: Request specific codec!
+        };
+
+        console.log(`[TTS] Sarvam request:`, {
+            speaker,
+            language,
+            sample_rate: 8000,
+            codec: outputCodec
+        });
+
         const response = await nodeFetch(
             "https://api.sarvam.ai/text-to-speech",
             {
@@ -286,14 +313,7 @@ async function generateSarvamTTS(text, options = {}) {
                     "api-subscription-key": apiKey,
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({
-                    inputs: [text],
-                    target_language_code: language,
-                    speaker: speaker,
-                    model: "bulbul:v2",
-                    enable_preprocessing: true,
-                    speech_sample_rate: 8000 // Force 8kHz
-                }),
+                body: JSON.stringify(requestBody),
             }
         );
 
@@ -339,7 +359,20 @@ async function generateSarvamTTS(text, options = {}) {
             return mp3Buffer;
         }
 
-        // For Twilio calls: Robust 2-Step Conversion: Source -> PCM 8k -> MuLaw
+        // For Twilio calls: Check if we already have µ-law
+        console.log(`[TTS] Processing audio for Twilio...`);
+
+        // If we requested mulaw and got it, return directly!
+        if (outputCodec === 'mulaw') {
+            console.log(`[TTS] ✨ Sarvam returned µ-law directly - NO CONVERSION NEEDED!`);
+            console.log(`[TTS] Audio size: ${audioBuffer.length} bytes`);
+            // Sarvam returns raw µ-law data when requested
+            return audioBuffer;
+        }
+
+        // Otherwise, we have PCM/WAV/MP3 and need to convert
+        console.log(`[TTS] Converting ${actualFormat} to µ-law for Twilio...`);
+
         // Step 1: Convert to PCM 8k (using FFmpeg)
         const pcmBuffer = await convertToPcm8k(audioBuffer, actualFormat);
         console.log(`[TTS] Converted to PCM 8k: ${pcmBuffer.length} bytes`);
