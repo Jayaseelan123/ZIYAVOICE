@@ -53,6 +53,7 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.9.5",
+    "react-snowfall": "^2.4.0",
     "twilio": "^5.10.4",
     "uuid": "^9.0.1",
     "wavefile": "^11.0.0",
