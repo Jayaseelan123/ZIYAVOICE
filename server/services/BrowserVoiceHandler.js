@@ -497,8 +497,15 @@ class BrowserVoiceHandler {
      * Get voice provider from voice ID
      */
     getVoiceProvider(voiceId) {
-        // Sarvam voice IDs: vidya, meera, arvind, etc.
-        const sarvamVoices = ['vidya', 'meera', 'arvind', 'aditi', 'ananya'];
+        // Sarvam voice IDs - comprehensive list
+        const sarvamVoices = [
+            // Female voices
+            'meera', 'ananya', 'aditi', 'vidya',
+            // Male voices
+            'arvind', 'abhilash', 'aarav',
+            // Additional Sarvam voices
+            'arya', 'hitesh', 'chitra'
+        ];
 
         // Check if voice ID contains 'sarvam' or matches known Sarvam voices
         if (voiceId.includes('sarvam') || sarvamVoices.includes(voiceId.toLowerCase())) {
@@ -591,7 +598,7 @@ class BrowserVoiceHandler {
                     'voice-agent', // to_number
                     'inbound', // direction
                     'in-progress', // status
-                    'browser', // call_type (browser instead of web_call)
+                    'web_call', // call_type - changed from 'browser' to match database ENUM
                     new Date(session.startTime)
                 ]
             );
