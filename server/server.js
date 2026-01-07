@@ -1263,6 +1263,57 @@ app.patch('/api/admin/billing/:billingId', async (req, res) => {
 
 // ==================== END ADMIN PANEL ENDPOINTS ====================
 
+// ==================== SNOWFALL SETTINGS ENDPOINTS ====================
+
+// In-memory storage for snowfall setting (you can move this to database if needed)
+let globalSnowfallEnabled = false;
+
+// Get snowfall setting (public endpoint - all users can check)
+app.get('/api/admin/settings/snowfall', async (req, res) => {
+  try {
+    res.json({ success: true, enabled: globalSnowfallEnabled });
+  } catch (error) {
+    console.error('Error fetching snowfall setting:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Toggle snowfall setting (admin only)
+app.post('/api/admin/settings/snowfall/toggle', async (req, res) => {
+  try {
+    const { adminId, enabled } = req.body;
+
+    if (!adminId) {
+      return res.status(401).json({ success: false, message: 'Admin authentication required' });
+    }
+
+    // Update global setting
+    globalSnowfallEnabled = enabled !== undefined ? enabled : !globalSnowfallEnabled;
+
+    // Log admin activity
+    await adminService.logActivity(
+      adminId,
+      'toggle_snowfall',
+      null,
+      `Set snowfall effect to: ${globalSnowfallEnabled ? 'enabled' : 'disabled'}`,
+      req.ip
+    );
+
+    console.log(`🎄 Snowfall effect ${globalSnowfallEnabled ? 'enabled' : 'disabled'} by admin ${adminId}`);
+
+    res.json({
+      success: true,
+      enabled: globalSnowfallEnabled,
+      message: `Snowfall effect ${globalSnowfallEnabled ? 'enabled' : 'disabled'} for all users`
+    });
+  } catch (error) {
+    console.error('Error toggling snowfall setting:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ==================== END SNOWFALL SETTINGS ENDPOINTS ====================
+
 // Get all API keys for a user (metadata only)
 app.get('/api/user-api-keys/:userId', async (req, res) => {
   try {
