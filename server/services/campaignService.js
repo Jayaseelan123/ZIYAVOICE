@@ -267,14 +267,18 @@ class CampaignService {
                 `campaignId=${campaignId}&` +
                 `contactId=${contact.id}`;
 
-            // Make the call using Twilio
+            // Make the call using Twilio with recording enabled for campaign calls
             const call = await this.twilioClient.calls.create({
                 from: fromNumber,
                 to: contact.phone_number,
                 url: twimlUrl,
-                statusCallback: `${getBackendUrl()}/api/twilio/status`,
+                statusCallback: `${getBackendUrl()}/api/twilio/status?callId=${contact.id}`,
                 statusCallbackEvent: ['completed'],
-                statusCallbackMethod: 'POST'
+                statusCallbackMethod: 'POST',
+                record: true,  // Enable recording for campaign calls
+                recordingStatusCallback: `${getBackendUrl()}/api/twilio/recording-status?contactId=${contact.id}`,
+                recordingStatusCallbackEvent: ['completed'],
+                recordingStatusCallbackMethod: 'POST'
             });
 
             console.log(`✅ Call initiated: ${call.sid}`);
@@ -530,6 +534,18 @@ class CampaignService {
 
             const spreadsheetId = spreadsheetIdMatch[1];
 
+            // Get recording URL from calls table if available
+            let recordingUrl = '';
+            if (contact.call_id) {
+                const [calls] = await this.mysqlPool.execute(
+                    'SELECT recording_url FROM calls WHERE id = ?',
+                    [contact.call_id]
+                );
+                if (calls.length > 0 && calls[0].recording_url) {
+                    recordingUrl = calls[0].recording_url;
+                }
+            }
+
             // Prepare data row
             const timestamp = new Date().toISOString();
             const rowData = [
@@ -540,6 +556,7 @@ class CampaignService {
                 status,
                 callDuration || 0,
                 callCost || 0,
+                recordingUrl,  // Add recording URL
                 contact.metadata ? JSON.stringify(contact.metadata) : ''
             ];
 
@@ -572,7 +589,7 @@ class CampaignService {
             // Append row to sheet
             await sheets.spreadsheets.values.append({
                 spreadsheetId: spreadsheetId,
-                range: 'Sheet1!A:H', // Adjust sheet name if needed
+                range: 'Sheet1!A:I', // Updated to include recording URL column
                 valueInputOption: 'USER_ENTERED',
                 resource: {
                     values: [rowData]
