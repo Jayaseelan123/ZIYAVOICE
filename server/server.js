@@ -175,13 +175,16 @@ if (!process.env.ELEVEN_LABS_API_KEY) {
 }
 console.log("Twilio Basic Service initialized");
 // ================= CORS ==================
-const FRONTEND_URL = "https://ziyavoice.aspirentech.com";
+// ================= CORS ==================
+const FRONTEND_URL = process.env.FRONTEND_URL || "https://ziyavoice1.netlify.app";
 
 const corsOptions = {
   origin: [
     FRONTEND_URL,
+    "https://ziyavoice1.netlify.app", // Keep old one just in case
     /\.netlify\.app$/,
-    /\.vercel\.app$/
+    /\.vercel\.app$/, // Allow Vercel deployments
+    /\.railway\.app$/ // Allow Railway internal calls if needed
   ],
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -1509,6 +1512,94 @@ app.post('/api/twilio/status', async (req, res) => {
 
   } catch (error) {
     console.error('Error processing Twilio status callback:', error);
+    res.status(200).send('OK');
+  }
+});
+
+// Twilio recording status callback - handles recording completion
+app.post('/api/twilio/recording-status', async (req, res) => {
+  try {
+    const { contactId } = req.query;
+    const { RecordingUrl, RecordingSid, CallSid } = req.body;
+
+    console.log('Twilio recording status callback:', {
+      contactId,
+      recordingSid: RecordingSid,
+      callSid: CallSid,
+      recordingUrl: RecordingUrl
+    });
+
+    if (contactId && RecordingUrl) {
+      // Get the call_id from campaign_contacts
+      const [contacts] = await mysqlPool.execute(
+        'SELECT call_id, campaign_id FROM campaign_contacts WHERE id = ?',
+        [contactId]
+      );
+
+      if (contacts.length > 0 && contacts[0].call_id) {
+        const callId = contacts[0].call_id;
+        const campaignId = contacts[0].campaign_id;
+
+        // Update the calls table with recording URL
+        await mysqlPool.execute(
+          'UPDATE calls SET recording_url = ? WHERE id = ?',
+          [RecordingUrl, callId]
+        );
+
+        console.log(`✅ Recording URL saved for call ${callId}: ${RecordingUrl}`);
+
+        // Get campaign to check if Google Sheets is configured
+        const [campaigns] = await mysqlPool.execute(
+          'SELECT google_sheet_url, user_id, agent_id FROM campaigns WHERE id = ?',
+          [campaignId]
+        );
+
+        if (campaigns.length > 0 && campaigns[0].google_sheet_url) {
+          // Re-log to Google Sheets with the recording URL
+          // Get contact details
+          const [contactDetails] = await mysqlPool.execute(
+            `SELECT cc.*, c.name as campaign_name 
+             FROM campaign_contacts cc
+             JOIN campaigns c ON cc.campaign_id = c.id
+             WHERE cc.id = ?`,
+            [contactId]
+          );
+
+          if (contactDetails.length > 0) {
+            const contact = contactDetails[0];
+
+            // Update the Google Sheets row with recording URL
+            try {
+              const googleSheetsService = require('./services/googleSheetsService.js');
+              const spreadsheetId = googleSheetsService.extractSpreadsheetId(campaigns[0].google_sheet_url);
+
+              // Find and update the row with this phone number and timestamp
+              // For simplicity, we'll append a new row with updated info
+              await googleSheetsService.logCallData(spreadsheetId, {
+                phone: contact.phone_number,
+                callStatus: contact.status,
+                duration: contact.call_duration || 0,
+                callSid: CallSid,
+                recordingUrl: RecordingUrl,
+                agentName: 'Campaign Agent',
+                campaignName: contact.campaign_name,
+                retries: contact.attempts || 0,
+                metadata: contact.metadata ? JSON.parse(contact.metadata) : {}
+              });
+
+              console.log(`✅ Updated Google Sheets with recording URL for ${contact.phone_number}`);
+            } catch (error) {
+              console.error('Failed to update Google Sheets with recording URL:', error.message);
+            }
+          }
+        }
+      }
+    }
+
+    res.status(200).send('OK');
+
+  } catch (error) {
+    console.error('Error processing Twilio recording status callback:', error);
     res.status(200).send('OK');
   }
 });
