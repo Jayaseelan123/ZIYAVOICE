@@ -179,7 +179,7 @@ class CampaignService {
                 'SELECT * FROM campaign_settings WHERE campaign_id = ?',
                 [campaignId]
             );
-            const campaignSettings = settings[0] || { call_interval_seconds: 5 };
+            const campaignSettings = settings[0] || { call_interval_seconds: 10 };
 
             // Get pending contacts
             const [contacts] = await this.mysqlPool.execute(
@@ -190,9 +190,13 @@ class CampaignService {
             );
 
             console.log(`📋 Found ${contacts.length} contacts to call`);
+            console.log(`⏱️ Call interval: ${campaignSettings.call_interval_seconds} seconds between calls`);
 
-            // Process each contact
-            for (const contact of contacts) {
+            // Process each contact ONE BY ONE (sequential, not parallel)
+            for (let i = 0; i < contacts.length; i++) {
+                const contact = contacts[i];
+                console.log(`\n📞 Processing contact ${i + 1}/${contacts.length}: ${contact.phone_number}`);
+
                 // Check if campaign is still running
                 const campaignState = this.activeCampaigns.get(campaignId);
                 if (!campaignState || campaignState.status !== 'running') {
@@ -208,13 +212,19 @@ class CampaignService {
                     break;
                 }
 
-                // Make the call
+                // Make the call (AWAIT ensures we wait for this to complete before moving to next)
+                console.log(`🔄 Initiating call to ${contact.phone_number}...`);
                 await this.makeCall(campaignId, contact, campaign, agentSettings);
 
-                // Wait between calls
-                if (campaignSettings && campaignSettings.call_interval_seconds > 0) {
+                // Wait between calls (prevents calling all numbers at once)
+                if (i < contacts.length - 1) { // Don't wait after the last call
+                    const waitTime = campaignSettings && campaignSettings.call_interval_seconds > 0
+                        ? campaignSettings.call_interval_seconds
+                        : 10; // Default 10 seconds
+
+                    console.log(`⏳ Waiting ${waitTime} seconds before next call...`);
                     await new Promise(resolve =>
-                        setTimeout(resolve, campaignSettings.call_interval_seconds * 1000)
+                        setTimeout(resolve, waitTime * 1000)
                     );
                 }
             }
